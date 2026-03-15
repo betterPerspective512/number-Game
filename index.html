@@ -120,7 +120,6 @@
             transition: color 0.3s;
         }
 
-        /* Game State Specifics */
         .history-log {
             background: var(--bg);
             height: 200px;
@@ -146,7 +145,6 @@
         .log-entry.red { border-left: 4px solid var(--neon-red); background: rgba(255, 75, 114, 0.1); color: #ffd1dc; }
         .log-entry.gold { border-left: 4px solid var(--neon-gold); background: rgba(255, 215, 0, 0.1); font-weight: bold; color: var(--neon-gold); text-shadow: 0 0 5px rgba(255,215,0,0.5); }
 
-        /* Modal styling */
         .modal {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(11, 12, 16, 0.9); z-index: 1000;
@@ -220,24 +218,11 @@
         const guessInput = document.getElementById('guessInput');
         const guessBtn = document.getElementById('guessBtn');
 
-        // Client State
         let isMyTurn = false;
-        let currentTurnName = '';
 
-        // Helper to switch views
         function switchState(stateName) {
             Object.values(states).forEach(el => el.classList.remove('active'));
             if(states[stateName]) states[stateName].classList.add('active');
-        }
-
-        function updateTimerDisplay(time) {
-            if (isMyTurn) {
-                turnInfo.innerText = `🔥 YOUR TURN! Time: ${time}s`;
-                turnInfo.style.color = 'var(--neon-gold)';
-            } else {
-                turnInfo.innerText = `⏳ ${currentTurnName}'s Turn. Time: ${time}s`;
-                turnInfo.style.color = 'var(--text)';
-            }
         }
 
         // --- Socket Events ---
@@ -261,10 +246,6 @@
 
         socket.on('turnUpdate', (data) => {
             isMyTurn = (socket.id === data.currentPlayerId);
-            currentTurnName = data.currentPlayerName;
-            
-            updateTimerDisplay(data.timeLeft);
-            
             guessInput.disabled = !isMyTurn;
             guessBtn.disabled = !isMyTurn;
             
@@ -273,8 +254,17 @@
             }
         });
 
-        socket.on('timerUpdate', (timeLeft) => {
-            updateTimerDisplay(timeLeft);
+        socket.on('timerUpdate', (data) => {
+            // Guarantee accurate visual state on every single tick
+            const isActivePlayer = (socket.id === data.currentPlayerId);
+            
+            if (isActivePlayer) {
+                turnInfo.innerText = `🔥 YOUR TURN! Time: ${data.timeLeft}s`;
+                turnInfo.style.color = 'var(--neon-gold)';
+            } else {
+                turnInfo.innerText = `⏳ ${data.currentPlayerName}'s Turn. Time: ${data.timeLeft}s`;
+                turnInfo.style.color = 'var(--text)';
+            }
         });
 
         socket.on('guessResult', (data) => {
@@ -320,7 +310,7 @@
         }
 
         function makeGuess() {
-            if (!isMyTurn) return; // Extra client-side safeguard
+            if (!isMyTurn) return; 
             
             const guess = guessInput.value;
             if (!guess || guess < 1 || guess > 100) return alert('Invalid guess!');
@@ -333,7 +323,6 @@
             socket.emit('playAgain');
         }
         
-        // Enter key listeners for better UX
         document.getElementById('guessInput').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') makeGuess();
         });
