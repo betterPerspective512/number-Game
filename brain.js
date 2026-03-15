@@ -27,21 +27,32 @@ function startTurn() {
     game.timeLeft = 15;
     clearInterval(game.timerInterval);
     
+    // Broadcast initial turn state to lock/unlock inputs
     io.emit('turnUpdate', {
+        currentPlayerId: game.players[game.currentPlayerIndex].id
+    });
+
+    // Broadcast the first tick immediately
+    io.emit('timerUpdate', {
+        timeLeft: game.timeLeft,
         currentPlayerId: game.players[game.currentPlayerIndex].id,
-        currentPlayerName: game.players[game.currentPlayerIndex].name,
-        timeLeft: game.timeLeft
+        currentPlayerName: game.players[game.currentPlayerIndex].name
     });
 
     game.timerInterval = setInterval(() => {
         game.timeLeft--;
-        io.emit('timerUpdate', game.timeLeft);
+        
+        // Send absolute truth to all clients every second
+        io.emit('timerUpdate', {
+            timeLeft: game.timeLeft,
+            currentPlayerId: game.players[game.currentPlayerIndex].id,
+            currentPlayerName: game.players[game.currentPlayerIndex].name
+        });
         
         // If time runs out
         if (game.timeLeft <= 0) {
             clearInterval(game.timerInterval);
             
-            // Notify players of the timeout
             io.emit('guessResult', {
                 text: `⏰ ${game.players[game.currentPlayerIndex].name} ran out of time! Turn skipped.`,
                 color: 'red'
@@ -102,7 +113,6 @@ io.on('connection', (socket) => {
     socket.on('makeGuess', (guessStr) => {
         if (game.gameState !== 'playing') return;
 
-        // Ensure it is actually this player's turn
         if (game.players[game.currentPlayerIndex].id !== socket.id) {
             socket.emit('errorMsg', "Hold on, it's not your turn!");
             return;
@@ -114,7 +124,6 @@ io.on('connection', (socket) => {
         const opponentIndex = playerIndex === 0 ? 1 : 0;
         const opponent = game.players[opponentIndex];
 
-        // Clear timer since a valid guess was made
         clearInterval(game.timerInterval);
 
         player.lastGuess = guess;
@@ -142,7 +151,6 @@ io.on('connection', (socket) => {
                 color: statusColor
             });
             
-            // Switch turns and start timer
             game.currentPlayerIndex = opponentIndex;
             startTurn();
         } else {
@@ -153,7 +161,6 @@ io.on('connection', (socket) => {
                 color: statusColor
             });
             
-            // Switch turns and start timer
             game.currentPlayerIndex = opponentIndex;
             startTurn();
         }
@@ -164,7 +171,7 @@ io.on('connection', (socket) => {
         if (game.gameState === 'game_over') {
             game.turnCount = 0;
             game.gameState = 'setting_secrets';
-            clearInterval(game.timerInterval); // Stop any lingering timers
+            clearInterval(game.timerInterval);
             game.players.forEach(p => {
                 p.secret = null;
                 p.lastGuess = null;
@@ -177,7 +184,7 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log(`User disconnected: ${socket.id}`);
-        clearInterval(game.timerInterval); // Halt timer on disconnect
+        clearInterval(game.timerInterval);
         game.players = game.players.filter(p => p.id !== socket.id);
         game.gameState = 'waiting';
         io.emit('clearBoard');
