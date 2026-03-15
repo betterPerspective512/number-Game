@@ -16,8 +16,43 @@ app.get('/', (req, res) => {
 let game = {
     players: [],
     turnCount: 0,
-    gameState: 'waiting' // waiting, setting_secrets, playing, game_over
+    gameState: 'waiting', // waiting, setting_secrets, playing, game_over
+    currentPlayerIndex: 0,
+    timerInterval: null,
+    timeLeft: 15
 };
+
+// Function to handle turn switching and timer management
+function startTurn() {
+    game.timeLeft = 15;
+    clearInterval(game.timerInterval);
+    
+    io.emit('turnUpdate', {
+        currentPlayerId: game.players[game.currentPlayerIndex].id,
+        currentPlayerName: game.players[game.currentPlayerIndex].name,
+        timeLeft: game.timeLeft
+    });
+
+    game.timerInterval = setInterval(() => {
+        game.timeLeft--;
+        io.emit('timerUpdate', game.timeLeft);
+        
+        // If time runs out
+        if (game.timeLeft <= 0) {
+            clearInterval(game.timerInterval);
+            
+            // Notify players of the timeout
+            io.emit('guessResult', {
+                text: `⏰ ${game.players[game.currentPlayerIndex].name} ran out of time! Turn skipped.`,
+                color: 'red'
+            });
+            
+            // Switch turn to the other player
+            game.currentPlayerIndex = game.currentPlayerIndex === 0 ? 1 : 0;
+            startTurn();
+        }
+    }, 1000);
+}
 
 io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
@@ -56,8 +91,10 @@ io.on('connection', (socket) => {
         const allSecretsSet = game.players.every(p => p.secret !== null);
         if (allSecretsSet && game.players.length === 2) {
             game.gameState = 'playing';
+            game.currentPlayerIndex = 0; // Player 1 starts
             io.emit('gameStateUpdate', game.gameState);
             io.emit('updateStatus', 'Game ON! Start guessing.');
+            startTurn();
         }
     });
 
@@ -65,16 +102,26 @@ io.on('connection', (socket) => {
     socket.on('makeGuess', (guessStr) => {
         if (game.gameState !== 'playing') return;
 
+        // Ensure it is actually this player's turn
+        if (game.players[game.currentPlayerIndex].id !== socket.id) {
+            socket.emit('errorMsg', "Hold on, it's not your turn!");
+            return;
+        }
+
         const guess = parseInt(guessStr);
-        const playerIndex = game.players.findIndex(p => p.id === socket.id);
+        const playerIndex = game.currentPlayerIndex;
         const player = game.players[playerIndex];
-        const opponent = game.players[playerIndex === 0 ? 1 : 0];
+        const opponentIndex = playerIndex === 0 ? 1 : 0;
+        const opponent = game.players[opponentIndex];
+
+        // Clear timer since a valid guess was made
+        clearInterval(game.timerInterval);
 
         player.lastGuess = guess;
         game.turnCount++;
 
         let feedback = '';
-        let statusColor = ''; // blue for higher, red for lower, gold for win
+        let statusColor = ''; 
 
         if (guess === opponent.secret) {
             feedback = 'Winner';
@@ -94,6 +141,10 @@ io.on('connection', (socket) => {
                 text: `${player.name} guessed ${guess} -> Opponent says ${feedback} ⬆️`,
                 color: statusColor
             });
+            
+            // Switch turns and start timer
+            game.currentPlayerIndex = opponentIndex;
+            startTurn();
         } else {
             feedback = 'Lower';
             statusColor = 'red';
@@ -101,6 +152,10 @@ io.on('connection', (socket) => {
                 text: `${player.name} guessed ${guess} -> Opponent says ${feedback} ⬇️`,
                 color: statusColor
             });
+            
+            // Switch turns and start timer
+            game.currentPlayerIndex = opponentIndex;
+            startTurn();
         }
     });
 
@@ -109,6 +164,7 @@ io.on('connection', (socket) => {
         if (game.gameState === 'game_over') {
             game.turnCount = 0;
             game.gameState = 'setting_secrets';
+            clearInterval(game.timerInterval); // Stop any lingering timers
             game.players.forEach(p => {
                 p.secret = null;
                 p.lastGuess = null;
@@ -121,6 +177,7 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log(`User disconnected: ${socket.id}`);
+        clearInterval(game.timerInterval); // Halt timer on disconnect
         game.players = game.players.filter(p => p.id !== socket.id);
         game.gameState = 'waiting';
         io.emit('clearBoard');
