@@ -68,10 +68,16 @@
             font-size: 1rem;
             text-align: center;
             outline: none;
-            transition: border 0.3s;
+            transition: border 0.3s, opacity 0.3s;
         }
 
-        input:focus { border-color: var(--neon-blue); box-shadow: 0 0 8px var(--neon-blue); }
+        input:focus:not(:disabled) { border-color: var(--neon-blue); box-shadow: 0 0 8px var(--neon-blue); }
+        
+        input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            border-color: #555;
+        }
 
         button {
             background: transparent;
@@ -86,10 +92,17 @@
             box-shadow: 0 0 5px var(--neon-blue) inset;
         }
 
-        button:hover {
+        button:hover:not(:disabled) {
             background: var(--neon-blue);
             color: var(--bg);
             box-shadow: 0 0 15px var(--neon-blue), 0 0 5px var(--neon-blue) inset;
+        }
+
+        button:disabled {
+            color: #555;
+            border-color: #555;
+            box-shadow: none;
+            cursor: not-allowed;
         }
 
         .status-bar {
@@ -97,6 +110,14 @@
             font-size: 0.9rem;
             color: #888;
             font-style: italic;
+        }
+
+        #turnInfo {
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+            font-weight: bold;
+            font-family: 'Orbitron', sans-serif;
+            transition: color 0.3s;
         }
 
         /* Game State Specifics */
@@ -164,10 +185,10 @@
 
         <div id="game-state" class="state-section">
             <h2>Arena</h2>
-            <div class="history-log" id="historyLog">
-                </div>
-            <input type="number" id="guessInput" placeholder="Enter your guess..." min="1" max="100">
-            <button onclick="makeGuess()">Fire Guess</button>
+            <div id="turnInfo">Waiting to start...</div>
+            <div class="history-log" id="historyLog"></div>
+            <input type="number" id="guessInput" placeholder="Enter your guess..." min="1" max="100" disabled>
+            <button id="guessBtn" onclick="makeGuess()" disabled>Fire Guess</button>
         </div>
 
         <div class="status-bar" id="statusBar">Connecting to server...</div>
@@ -195,11 +216,28 @@
         const historyLog = document.getElementById('historyLog');
         const winModal = document.getElementById('winModal');
         const winnerText = document.getElementById('winnerText');
+        const turnInfo = document.getElementById('turnInfo');
+        const guessInput = document.getElementById('guessInput');
+        const guessBtn = document.getElementById('guessBtn');
+
+        // Client State
+        let isMyTurn = false;
+        let currentTurnName = '';
 
         // Helper to switch views
         function switchState(stateName) {
             Object.values(states).forEach(el => el.classList.remove('active'));
             if(states[stateName]) states[stateName].classList.add('active');
+        }
+
+        function updateTimerDisplay(time) {
+            if (isMyTurn) {
+                turnInfo.innerText = `🔥 YOUR TURN! Time: ${time}s`;
+                turnInfo.style.color = 'var(--neon-gold)';
+            } else {
+                turnInfo.innerText = `⏳ ${currentTurnName}'s Turn. Time: ${time}s`;
+                turnInfo.style.color = 'var(--text)';
+            }
         }
 
         // --- Socket Events ---
@@ -216,26 +254,50 @@
             if (newState === 'setting_secrets') {
                 switchState('setup');
                 document.getElementById('secretNumber').value = '';
+                document.getElementById('secretNumber').disabled = false;
             }
             if (newState === 'playing') switchState('game');
         });
 
+        socket.on('turnUpdate', (data) => {
+            isMyTurn = (socket.id === data.currentPlayerId);
+            currentTurnName = data.currentPlayerName;
+            
+            updateTimerDisplay(data.timeLeft);
+            
+            guessInput.disabled = !isMyTurn;
+            guessBtn.disabled = !isMyTurn;
+            
+            if (isMyTurn) {
+                guessInput.focus();
+            }
+        });
+
+        socket.on('timerUpdate', (timeLeft) => {
+            updateTimerDisplay(timeLeft);
+        });
+
         socket.on('guessResult', (data) => {
             const entry = document.createElement('div');
-            entry.className = `log-entry ${data.color}`; // Adds 'blue', 'red', or 'gold' class
+            entry.className = `log-entry ${data.color}`; 
             entry.innerText = data.text;
             historyLog.appendChild(entry);
-            historyLog.scrollTop = historyLog.scrollHeight; // Auto-scroll
+            historyLog.scrollTop = historyLog.scrollHeight; 
         });
 
         socket.on('gameOver', (data) => {
             winnerText.innerText = `🏆 ${data.winner} Wins!`;
             winModal.style.display = 'flex';
+            guessInput.disabled = true;
+            guessBtn.disabled = true;
+            turnInfo.innerText = "Game Over!";
+            turnInfo.style.color = 'var(--neon-blue)';
         });
 
         socket.on('clearBoard', () => {
             historyLog.innerHTML = '';
             winModal.style.display = 'none';
+            turnInfo.innerText = "Waiting to start...";
         });
 
         socket.on('errorMsg', (msg) => {
@@ -258,17 +320,17 @@
         }
 
         function makeGuess() {
-            const guessInput = document.getElementById('guessInput');
+            if (!isMyTurn) return; // Extra client-side safeguard
+            
             const guess = guessInput.value;
             if (!guess || guess < 1 || guess > 100) return alert('Invalid guess!');
+            
             socket.emit('makeGuess', guess);
-            guessInput.value = ''; // clear input
-            guessInput.focus();
+            guessInput.value = ''; 
         }
 
         function playAgain() {
             socket.emit('playAgain');
-            document.getElementById('secretNumber').disabled = false;
         }
         
         // Enter key listeners for better UX
