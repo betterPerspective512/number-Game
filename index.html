@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Guess Clash</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Poppins:wght@300;500&display=swap');
+
+        :root {
+            --bg: #0b0c10;
+            --surface: #1f2833;
+            --text: #c5c6c7;
+            --blue: #45a29e;
+            --neon-blue: #66fcf1;
+            --red: #e0245e;
+            --neon-red: #ff4b72;
+            --neon-gold: #ffd700;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        h1, h2, h3 {
+            font-family: 'Orbitron', sans-serif;
+            text-transform: uppercase;
+            text-align: center;
+            color: var(--neon-blue);
+            text-shadow: 0 0 10px rgba(102, 252, 241, 0.5);
+        }
+
+        .container {
+            background-color: var(--surface);
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 0 20px rgba(102, 252, 241, 0.2);
+            width: 90%;
+            max-width: 450px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .state-section { display: none; }
+        .state-section.active { display: block; animation: fadeIn 0.5s ease; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        input {
+            width: 80%;
+            padding: 12px;
+            margin: 15px 0;
+            background: var(--bg);
+            border: 2px solid var(--blue);
+            color: white;
+            border-radius: 8px;
+            font-size: 1rem;
+            text-align: center;
+            outline: none;
+            transition: border 0.3s;
+        }
+
+        input:focus { border-color: var(--neon-blue); box-shadow: 0 0 8px var(--neon-blue); }
+
+        button {
+            background: transparent;
+            color: var(--neon-blue);
+            border: 2px solid var(--neon-blue);
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-family: 'Orbitron', sans-serif;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 5px var(--neon-blue) inset;
+        }
+
+        button:hover {
+            background: var(--neon-blue);
+            color: var(--bg);
+            box-shadow: 0 0 15px var(--neon-blue), 0 0 5px var(--neon-blue) inset;
+        }
+
+        .status-bar {
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: #888;
+            font-style: italic;
+        }
+
+        /* Game State Specifics */
+        .history-log {
+            background: var(--bg);
+            height: 200px;
+            border-radius: 8px;
+            border: 1px solid var(--blue);
+            overflow-y: auto;
+            padding: 10px;
+            margin-bottom: 15px;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .log-entry {
+            padding: 8px;
+            border-radius: 5px;
+            font-size: 0.9rem;
+            animation: fadeIn 0.3s;
+        }
+
+        .log-entry.blue { border-left: 4px solid var(--neon-blue); background: rgba(102, 252, 241, 0.1); }
+        .log-entry.red { border-left: 4px solid var(--neon-red); background: rgba(255, 75, 114, 0.1); color: #ffd1dc; }
+        .log-entry.gold { border-left: 4px solid var(--neon-gold); background: rgba(255, 215, 0, 0.1); font-weight: bold; color: var(--neon-gold); text-shadow: 0 0 5px rgba(255,215,0,0.5); }
+
+        /* Modal styling */
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(11, 12, 16, 0.9); z-index: 1000;
+            justify-content: center; align-items: center;
+        }
+        .modal-content {
+            background: var(--surface); padding: 3rem; border-radius: 15px;
+            border: 2px solid var(--neon-gold); box-shadow: 0 0 30px rgba(255, 215, 0, 0.4);
+            text-align: center;
+        }
+        .modal-content h2 { color: var(--neon-gold); text-shadow: none; font-size: 2rem; }
+        .modal-content button { border-color: var(--neon-gold); color: var(--neon-gold); box-shadow: 0 0 5px var(--neon-gold) inset; }
+        .modal-content button:hover { background: var(--neon-gold); color: var(--bg); box-shadow: 0 0 15px var(--neon-gold); }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Guess Clash</h1>
+        
+        <div id="lobby-state" class="state-section active">
+            <p>Enter your alias to enter the arena.</p>
+            <input type="text" id="playerName" placeholder="Player Name" maxlength="15" autocomplete="off">
+            <br>
+            <button onclick="joinGame()">Join Game</button>
+        </div>
+
+        <div id="setup-state" class="state-section">
+            <h2>Lock In</h2>
+            <p>Pick your secret number (1-100).</p>
+            <input type="number" id="secretNumber" placeholder="Secret Number" min="1" max="100">
+            <br>
+            <button onclick="setSecret()">Lock Secret</button>
+        </div>
+
+        <div id="game-state" class="state-section">
+            <h2>Arena</h2>
+            <div class="history-log" id="historyLog">
+                </div>
+            <input type="number" id="guessInput" placeholder="Enter your guess..." min="1" max="100">
+            <button onclick="makeGuess()">Fire Guess</button>
+        </div>
+
+        <div class="status-bar" id="statusBar">Connecting to server...</div>
+    </div>
+
+    <div class="modal" id="winModal">
+        <div class="modal-content">
+            <h2 id="winnerText">🏆 Winner!</h2>
+            <p>The clash has ended.</p>
+            <button onclick="playAgain()">Play Again</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        // UI Elements
+        const states = {
+            lobby: document.getElementById('lobby-state'),
+            setup: document.getElementById('setup-state'),
+            game: document.getElementById('game-state')
+        };
+        const statusBar = document.getElementById('statusBar');
+        const historyLog = document.getElementById('historyLog');
+        const winModal = document.getElementById('winModal');
+        const winnerText = document.getElementById('winnerText');
+
+        // Helper to switch views
+        function switchState(stateName) {
+            Object.values(states).forEach(el => el.classList.remove('active'));
+            if(states[stateName]) states[stateName].classList.add('active');
+        }
+
+        // --- Socket Events ---
+        socket.on('connect', () => {
+            statusBar.innerText = 'Connected. Ready to join.';
+        });
+
+        socket.on('updateStatus', (msg) => {
+            statusBar.innerText = msg;
+        });
+
+        socket.on('gameStateUpdate', (newState) => {
+            if (newState === 'waiting') switchState('lobby');
+            if (newState === 'setting_secrets') {
+                switchState('setup');
+                document.getElementById('secretNumber').value = '';
+            }
+            if (newState === 'playing') switchState('game');
+        });
+
+        socket.on('guessResult', (data) => {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${data.color}`; // Adds 'blue', 'red', or 'gold' class
+            entry.innerText = data.text;
+            historyLog.appendChild(entry);
+            historyLog.scrollTop = historyLog.scrollHeight; // Auto-scroll
+        });
+
+        socket.on('gameOver', (data) => {
+            winnerText.innerText = `🏆 ${data.winner} Wins!`;
+            winModal.style.display = 'flex';
+        });
+
+        socket.on('clearBoard', () => {
+            historyLog.innerHTML = '';
+            winModal.style.display = 'none';
+        });
+
+        socket.on('errorMsg', (msg) => {
+            alert(msg);
+        });
+
+        // --- Actions ---
+        function joinGame() {
+            const name = document.getElementById('playerName').value.trim();
+            if (!name) return alert('Enter a name!');
+            socket.emit('joinGame', name);
+            document.getElementById('playerName').disabled = true;
+        }
+
+        function setSecret() {
+            const secret = document.getElementById('secretNumber').value;
+            if (!secret || secret < 1 || secret > 100) return alert('Pick a number between 1 and 100');
+            socket.emit('setSecret', secret);
+            document.getElementById('secretNumber').disabled = true;
+        }
+
+        function makeGuess() {
+            const guessInput = document.getElementById('guessInput');
+            const guess = guessInput.value;
+            if (!guess || guess < 1 || guess > 100) return alert('Invalid guess!');
+            socket.emit('makeGuess', guess);
+            guessInput.value = ''; // clear input
+            guessInput.focus();
+        }
+
+        function playAgain() {
+            socket.emit('playAgain');
+            document.getElementById('secretNumber').disabled = false;
+        }
+        
+        // Enter key listeners for better UX
+        document.getElementById('guessInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') makeGuess();
+        });
+    </script>
+</body>
+</html>
