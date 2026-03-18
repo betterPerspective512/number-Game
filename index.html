@@ -3,200 +3,581 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neon Guess Clash</title>
+    <title>Guess Clash</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Poppins:wght@300;500&display=swap');
-
         :root {
-            --bg: #0b0c10;
-            --surface: #1f2833;
-            --text: #c5c6c7;
-            --blue: #45a29e;
-            --neon-blue: #66fcf1;
-            --red: #e0245e;
-            --neon-red: #ff4b72;
-            --neon-gold: #ffd700;
+            --bg: #07080d;
+            --surface: #0e1118;
+            --surface2: #161b26;
+            --border: #1e2535;
+            --text: #8892a4;
+            --text-bright: #dce3ef;
+            --accent: #4fffb0;
+            --accent-dim: rgba(79, 255, 176, 0.12);
+            --accent-glow: rgba(79, 255, 176, 0.35);
+            --red: #ff4f6d;
+            --red-dim: rgba(255, 79, 109, 0.12);
+            --blue: #4fb8ff;
+            --blue-dim: rgba(79, 184, 255, 0.12);
+            --gold: #ffd166;
+            --gold-dim: rgba(255, 209, 102, 0.12);
+            --gold-glow: rgba(255, 209, 102, 0.4);
+            --radius: 12px;
+            --radius-sm: 8px;
         }
 
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
-            background-color: var(--bg);
-            color: var(--text);
-            font-family: 'Poppins', sans-serif;
-            margin: 0;
+            background: var(--bg);
+            color: var(--text-bright);
+            font-family: 'Syne', sans-serif;
+            min-height: 100vh;
             display: flex;
-            justify-content: center;
+            flex-direction: column;
             align-items: center;
-            height: 100vh;
+            justify-content: center;
+            padding: 16px;
+            background-image:
+                radial-gradient(ellipse 80% 50% at 50% -10%, rgba(79,255,176,0.06) 0%, transparent 60%),
+                radial-gradient(ellipse 40% 30% at 80% 80%, rgba(79,184,255,0.04) 0%, transparent 60%);
+        }
+
+        /* ─── Header ─────────────────────────────── */
+        .brand {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+        .brand-title {
+            font-size: clamp(1.8rem, 5vw, 2.6rem);
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: var(--text-bright);
+            line-height: 1;
+        }
+        .brand-title span {
+            color: var(--accent);
+            text-shadow: 0 0 20px var(--accent-glow);
+        }
+        .brand-sub {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.7rem;
+            letter-spacing: 0.2em;
+            color: var(--text);
+            margin-top: 6px;
+            text-transform: uppercase;
+        }
+
+        /* ─── Card Shell ──────────────────────────── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            width: 100%;
+            max-width: 480px;
             overflow: hidden;
         }
 
-        h1, h2, h3 {
-            font-family: 'Orbitron', sans-serif;
+        /* ─── State Panels ────────────────────────── */
+        .panel { display: none; padding: 28px 28px 24px; }
+        .panel.active { display: block; animation: slideUp 0.3s ease; }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .panel-title {
+            font-size: 0.65rem;
+            font-family: 'Space Mono', monospace;
+            letter-spacing: 0.2em;
             text-transform: uppercase;
-            text-align: center;
-            color: var(--neon-blue);
-            text-shadow: 0 0 10px rgba(102, 252, 241, 0.5);
-        }
-
-        .container {
-            background-color: var(--surface);
-            padding: 2rem;
-            border-radius: 15px;
-            box-shadow: 0 0 20px rgba(102, 252, 241, 0.2);
-            width: 90%;
-            max-width: 450px;
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-
-        .state-section { display: none; }
-        .state-section.active { display: block; animation: fadeIn 0.5s ease; }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        input {
-            width: 80%;
-            padding: 12px;
-            margin: 15px 0;
-            background: var(--bg);
-            border: 2px solid var(--blue);
-            color: white;
-            border-radius: 8px;
-            font-size: 1rem;
-            text-align: center;
-            outline: none;
-            transition: border 0.3s, opacity 0.3s;
-        }
-
-        input:focus:not(:disabled) { border-color: var(--neon-blue); box-shadow: 0 0 8px var(--neon-blue); }
-        
-        input:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            border-color: #555;
-        }
-
-        button {
-            background: transparent;
-            color: var(--neon-blue);
-            border: 2px solid var(--neon-blue);
-            padding: 12px 24px;
-            font-size: 1rem;
-            font-family: 'Orbitron', sans-serif;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 0 5px var(--neon-blue) inset;
-        }
-
-        button:hover:not(:disabled) {
-            background: var(--neon-blue);
-            color: var(--bg);
-            box-shadow: 0 0 15px var(--neon-blue), 0 0 5px var(--neon-blue) inset;
-        }
-
-        button:disabled {
-            color: #555;
-            border-color: #555;
-            box-shadow: none;
-            cursor: not-allowed;
-        }
-
-        .status-bar {
-            margin-top: 15px;
-            font-size: 0.9rem;
-            color: #888;
-            font-style: italic;
-        }
-
-        #turnInfo {
-            font-size: 1.1rem;
-            margin-bottom: 10px;
-            font-weight: bold;
-            font-family: 'Orbitron', sans-serif;
-            transition: color 0.3s;
-        }
-
-        .history-log {
-            background: var(--bg);
-            height: 200px;
-            border-radius: 8px;
-            border: 1px solid var(--blue);
-            overflow-y: auto;
-            padding: 10px;
-            margin-bottom: 15px;
-            text-align: left;
+            color: var(--accent);
+            margin-bottom: 20px;
             display: flex;
-            flex-direction: column;
+            align-items: center;
             gap: 8px;
         }
+        .panel-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
 
-        .log-entry {
-            padding: 8px;
-            border-radius: 5px;
+        /* ─── Lobby: Two-column action area ──────── */
+        .lobby-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        @media (max-width: 380px) {
+            .lobby-actions { grid-template-columns: 1fr; }
+        }
+
+        .action-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: border-color 0.2s;
+        }
+        .action-card:hover { border-color: rgba(79,255,176,0.25); }
+        .action-card-label {
+            font-size: 0.6rem;
+            font-family: 'Space Mono', monospace;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--text);
+        }
+
+        /* ─── Inputs ──────────────────────────────── */
+        .field { display: flex; flex-direction: column; gap: 6px; }
+        .field label {
+            font-size: 0.7rem;
+            font-family: 'Space Mono', monospace;
+            color: var(--text);
+            letter-spacing: 0.08em;
+        }
+
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            padding: 11px 14px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-bright);
+            font-family: 'Space Mono', monospace;
             font-size: 0.9rem;
-            animation: fadeIn 0.3s;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            -moz-appearance: textfield;
         }
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button { -webkit-appearance: none; }
+        input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+        input:disabled { opacity: 0.4; cursor: not-allowed; }
+        input.error { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-dim); }
 
-        .log-entry.blue { border-left: 4px solid var(--neon-blue); background: rgba(102, 252, 241, 0.1); }
-        .log-entry.red { border-left: 4px solid var(--neon-red); background: rgba(255, 75, 114, 0.1); color: #ffd1dc; }
-        .log-entry.gold { border-left: 4px solid var(--neon-gold); background: rgba(255, 215, 0, 0.1); font-weight: bold; color: var(--neon-gold); text-shadow: 0 0 5px rgba(255,215,0,0.5); }
-
-        .modal {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(11, 12, 16, 0.9); z-index: 1000;
-            justify-content: center; align-items: center;
+        /* ─── Inline Error Message ────────────────── */
+        .error-msg {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--red);
+            min-height: 18px;
+            transition: opacity 0.2s;
         }
-        .modal-content {
-            background: var(--surface); padding: 3rem; border-radius: 15px;
-            border: 2px solid var(--neon-gold); box-shadow: 0 0 30px rgba(255, 215, 0, 0.4);
+        .error-msg:empty { opacity: 0; }
+
+        /* ─── Buttons ─────────────────────────────── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            padding: 11px 20px;
+            border-radius: var(--radius-sm);
+            font-family: 'Space Mono', monospace;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        .btn-primary {
+            background: var(--accent);
+            color: #07080d;
+            box-shadow: 0 0 16px var(--accent-glow);
+        }
+        .btn-primary:hover:not(:disabled) {
+            box-shadow: 0 0 28px var(--accent-glow);
+            transform: translateY(-1px);
+        }
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-bright);
+            border: 1px solid var(--border);
+        }
+        .btn-ghost:hover:not(:disabled) {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .btn-gold {
+            background: var(--gold);
+            color: #07080d;
+            box-shadow: 0 0 16px var(--gold-glow);
+        }
+        .btn-gold:hover:not(:disabled) {
+            box-shadow: 0 0 28px var(--gold-glow);
+            transform: translateY(-1px);
+        }
+        .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+        .btn-full { width: 100%; }
+
+        /* ─── Room Badge (shown after create) ────── */
+        .room-badge {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 4px;
+        }
+        .room-badge-id {
+            font-family: 'Space Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent);
+            letter-spacing: 0.1em;
+            text-shadow: 0 0 12px var(--accent-glow);
+        }
+        .room-badge-label {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.6rem;
+            letter-spacing: 0.15em;
+            color: var(--text);
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .copy-btn {
+            background: var(--accent-dim);
+            border: 1px solid rgba(79,255,176,0.2);
+            color: var(--accent);
+            border-radius: 6px;
+            padding: 8px 14px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .copy-btn:hover { background: rgba(79,255,176,0.2); }
+        .copy-btn.copied { color: var(--text); border-color: var(--border); background: transparent; }
+
+        /* ─── Players Row ─────────────────────────── */
+        .players-row {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
             text-align: center;
         }
-        .modal-content h2 { color: var(--neon-gold); text-shadow: none; font-size: 2rem; }
-        .modal-content button { border-color: var(--neon-gold); color: var(--neon-gold); box-shadow: 0 0 5px var(--neon-gold) inset; }
-        .modal-content button:hover { background: var(--neon-gold); color: var(--bg); box-shadow: 0 0 15px var(--neon-gold); }
+        .player-chip {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 10px 12px;
+        }
+        .player-chip-name {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--text-bright);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .player-chip-label {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.55rem;
+            color: var(--text);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+        .vs-badge {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text);
+            font-weight: 700;
+        }
 
+        /* ─── Timer Bar ───────────────────────────── */
+        .timer-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+        }
+        .turn-label {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text);
+            font-weight: 700;
+        }
+        .turn-label.active { color: var(--accent); text-shadow: 0 0 8px var(--accent-glow); }
+        .timer-pill {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 700;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 4px 14px;
+            color: var(--text-bright);
+            transition: color 0.3s, border-color 0.3s;
+            min-width: 60px;
+            text-align: center;
+        }
+        .timer-pill.urgent { color: var(--red); border-color: var(--red); box-shadow: 0 0 8px rgba(255,79,109,0.3); }
+
+        /* ─── History Log ─────────────────────────── */
+        .history-log {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            height: 180px;
+            overflow-y: auto;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            margin-bottom: 16px;
+        }
+        .history-log::-webkit-scrollbar { width: 4px; }
+        .history-log::-webkit-scrollbar-track { background: transparent; }
+        .history-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .log-entry {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.75rem;
+            padding: 8px 12px;
+            border-radius: 6px;
+            animation: slideUp 0.25s ease;
+            line-height: 1.5;
+        }
+        .log-entry.blue  { background: var(--blue-dim);  border-left: 3px solid var(--blue);  color: var(--blue); }
+        .log-entry.red   { background: var(--red-dim);   border-left: 3px solid var(--red);   color: var(--red); }
+        .log-entry.gold  { background: var(--gold-dim);  border-left: 3px solid var(--gold);  color: var(--gold); font-weight: 700; }
+
+        /* ─── Guess Row ───────────────────────────── */
+        .guess-row {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+        }
+        .guess-field { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+        .guess-field input { width: 100%; }
+
+        /* ─── Status Bar ──────────────────────────── */
+        .status-bar {
+            border-top: 1px solid var(--border);
+            padding: 12px 28px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--text);
+            letter-spacing: 0.03em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .status-dot {
+            width: 6px; height: 6px;
+            background: var(--accent);
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: 0 0 6px var(--accent);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ─── Win Modal ───────────────────────────── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(7,8,13,0.88);
+            backdrop-filter: blur(6px);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal-box {
+            background: var(--surface);
+            border: 1px solid var(--gold);
+            border-radius: var(--radius);
+            padding: 36px 32px;
+            text-align: center;
+            max-width: 360px;
+            width: 100%;
+            box-shadow: 0 0 48px var(--gold-glow);
+            animation: slideUp 0.35s ease;
+        }
+        .modal-trophy { font-size: 3rem; line-height: 1; margin-bottom: 12px; }
+        .modal-winner {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--gold);
+            text-shadow: 0 0 12px var(--gold-glow);
+            margin-bottom: 6px;
+        }
+        .modal-sub {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 24px;
+        }
+
+        /* ─── Divider ─────────────────────────────── */
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 16px 0;
+        }
+        .divider-line { flex: 1; height: 1px; background: var(--border); }
+        .divider-text {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.6rem;
+            color: var(--text);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h1>Guess Clash</h1>
-        
-        <div id="lobby-state" class="state-section active">
-            <p>Enter your alias to enter the arena.</p>
-            <input type="text" id="playerName" placeholder="Player Name" maxlength="15" autocomplete="off">
-            <br>
-            <button onclick="joinGame()">Join Game</button>
-        </div>
-
-        <div id="setup-state" class="state-section">
-            <h2>Lock In</h2>
-            <p>Pick your secret number (1-100).</p>
-            <input type="number" id="secretNumber" placeholder="Secret Number" min="1" max="100">
-            <br>
-            <button onclick="setSecret()">Lock Secret</button>
-        </div>
-
-        <div id="game-state" class="state-section">
-            <h2>Arena</h2>
-            <div id="turnInfo">Waiting to start...</div>
-            <div class="history-log" id="historyLog"></div>
-            <input type="number" id="guessInput" placeholder="Enter your guess..." min="1" max="100" disabled>
-            <button id="guessBtn" onclick="makeGuess()" disabled>Fire Guess</button>
-        </div>
-
-        <div class="status-bar" id="statusBar">Connecting to server...</div>
+    <div class="brand">
+        <div class="brand-title">Guess<span>Clash</span></div>
+        <div class="brand-sub">1 v 1 · Mind Game · Real Time</div>
     </div>
 
-    <div class="modal" id="winModal">
-        <div class="modal-content">
-            <h2 id="winnerText">🏆 Winner!</h2>
-            <p>The clash has ended.</p>
-            <button onclick="playAgain()">Play Again</button>
+    <div class="card">
+
+        <!-- ── LOBBY ──────────────────────────────── -->
+        <div id="panel-lobby" class="panel active">
+            <div class="panel-title">Enter Arena</div>
+
+            <div class="field" style="margin-bottom:16px;">
+                <label>Your Alias</label>
+                <input type="text" id="playerName" placeholder="e.g. ShadowFox" maxlength="15" autocomplete="off">
+            </div>
+
+            <div class="lobby-actions">
+                <!-- Create Room -->
+                <div class="action-card">
+                    <div class="action-card-label">Create Room</div>
+                    <button class="btn btn-primary btn-full" onclick="createRoom()">+ New Room</button>
+                </div>
+
+                <!-- Join Room -->
+                <div class="action-card">
+                    <div class="action-card-label">Join Room</div>
+                    <input type="text" id="roomIdInput" placeholder="Room ID" maxlength="6" autocomplete="off"
+                        style="text-transform:uppercase;letter-spacing:0.1em;">
+                    <button class="btn btn-ghost btn-full" onclick="joinRoom()">→ Join</button>
+                </div>
+            </div>
+
+            <!-- Room Created Badge (hidden until room created) -->
+            <div id="roomBadgeWrap" style="display:none; margin-top:20px;">
+                <div class="divider">
+                    <div class="divider-line"></div>
+                    <div class="divider-text">Share this room ID</div>
+                    <div class="divider-line"></div>
+                </div>
+                <div class="room-badge">
+                    <div>
+                        <div class="room-badge-label">Room ID</div>
+                        <div class="room-badge-id" id="roomBadgeId">------</div>
+                    </div>
+                    <button class="copy-btn" id="copyBtn" onclick="copyRoomId()">Copy</button>
+                </div>
+                <p style="font-family:'Space Mono',monospace;font-size:0.68rem;color:var(--text);text-align:center;margin-top:12px;">
+                    Waiting for opponent to join…
+                </p>
+            </div>
+        </div>
+
+        <!-- ── SETUP ──────────────────────────────── -->
+        <div id="panel-setup" class="panel">
+            <div class="panel-title">Lock In Secret</div>
+
+            <div id="playersRow" class="players-row">
+                <div class="player-chip">
+                    <div class="player-chip-name" id="p1Name">—</div>
+                    <div class="player-chip-label">Player 1</div>
+                </div>
+                <div class="vs-badge">VS</div>
+                <div class="player-chip">
+                    <div class="player-chip-name" id="p2Name">—</div>
+                    <div class="player-chip-label">Player 2</div>
+                </div>
+            </div>
+
+            <div class="field">
+                <label>Your Secret Number</label>
+                <input type="number" id="secretNumber" placeholder="1 – 100" min="1" max="100">
+                <div class="error-msg" id="secretError"></div>
+            </div>
+            <button class="btn btn-primary btn-full" onclick="setSecret()" style="margin-top:14px;">Lock It In 🔒</button>
+        </div>
+
+        <!-- ── GAME ───────────────────────────────── -->
+        <div id="panel-game" class="panel">
+            <div class="panel-title">Arena</div>
+
+            <div id="playersRowGame" class="players-row">
+                <div class="player-chip">
+                    <div class="player-chip-name" id="g1Name">—</div>
+                    <div class="player-chip-label">Player 1</div>
+                </div>
+                <div class="vs-badge">VS</div>
+                <div class="player-chip">
+                    <div class="player-chip-name" id="g2Name">—</div>
+                    <div class="player-chip-label">Player 2</div>
+                </div>
+            </div>
+
+            <div class="timer-row">
+                <div class="turn-label" id="turnLabel">Waiting…</div>
+                <div class="timer-pill" id="timerPill">—s</div>
+            </div>
+
+            <div class="history-log" id="historyLog"></div>
+
+            <div class="guess-row">
+                <div class="guess-field">
+                    <input type="number" id="guessInput" placeholder="1 – 100" min="1" max="100" disabled>
+                    <div class="error-msg" id="guessError"></div>
+                </div>
+                <button id="guessBtn" class="btn btn-primary" onclick="makeGuess()" disabled
+                    style="height:44px;padding:0 20px;flex-shrink:0;">Fire ⚡</button>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-dot"></div>
+            <span id="statusBar">Connecting…</span>
+        </div>
+    </div>
+
+    <!-- ── WIN MODAL ──────────────────────────────── -->
+    <div class="modal-overlay" id="winModal">
+        <div class="modal-box">
+            <div class="modal-trophy">🏆</div>
+            <div class="modal-winner" id="winnerText">Player Wins!</div>
+            <div class="modal-sub">Clash Ended</div>
+            <button class="btn btn-gold btn-full" onclick="playAgain()">Play Again</button>
         </div>
     </div>
 
@@ -204,127 +585,225 @@
     <script>
         const socket = io();
 
-        // UI Elements
-        const states = {
-            lobby: document.getElementById('lobby-state'),
-            setup: document.getElementById('setup-state'),
-            game: document.getElementById('game-state')
-        };
-        const statusBar = document.getElementById('statusBar');
-        const historyLog = document.getElementById('historyLog');
-        const winModal = document.getElementById('winModal');
-        const winnerText = document.getElementById('winnerText');
-        const turnInfo = document.getElementById('turnInfo');
-        const guessInput = document.getElementById('guessInput');
-        const guessBtn = document.getElementById('guessBtn');
-
+        // ── State ──────────────────────────────────
         let isMyTurn = false;
+        let currentRoomId = null;
 
-        function switchState(stateName) {
-            Object.values(states).forEach(el => el.classList.remove('active'));
-            if(states[stateName]) states[stateName].classList.add('active');
+        // ── DOM refs ───────────────────────────────
+        const panels = {
+            lobby: document.getElementById('panel-lobby'),
+            setup: document.getElementById('panel-setup'),
+            game:  document.getElementById('panel-game')
+        };
+        const statusBar    = document.getElementById('statusBar');
+        const historyLog   = document.getElementById('historyLog');
+        const winModal     = document.getElementById('winModal');
+        const winnerText   = document.getElementById('winnerText');
+        const turnLabel    = document.getElementById('turnLabel');
+        const timerPill    = document.getElementById('timerPill');
+        const guessInput   = document.getElementById('guessInput');
+        const guessBtn     = document.getElementById('guessBtn');
+        const guessError   = document.getElementById('guessError');
+        const secretError  = document.getElementById('secretError');
+
+        // ── Helpers ────────────────────────────────
+        function switchPanel(name) {
+            Object.values(panels).forEach(p => p.classList.remove('active'));
+            if (panels[name]) panels[name].classList.add('active');
         }
 
-        // --- Socket Events ---
+        function showError(el, input, msg) {
+            el.textContent = msg;
+            if (input) input.classList.add('error');
+            clearTimeout(el._t);
+            el._t = setTimeout(() => {
+                el.textContent = '';
+                if (input) input.classList.remove('error');
+            }, 3000);
+        }
+
+        function clearError(el, input) {
+            el.textContent = '';
+            if (input) input.classList.remove('error');
+        }
+
+        // ── Socket Events ──────────────────────────
         socket.on('connect', () => {
-            statusBar.innerText = 'Connected. Ready to join.';
+            statusBar.textContent = 'Connected. Ready to play.';
         });
 
-        socket.on('updateStatus', (msg) => {
-            statusBar.innerText = msg;
+        socket.on('updateStatus', msg => {
+            statusBar.textContent = msg;
         });
 
-        socket.on('gameStateUpdate', (newState) => {
-            if (newState === 'waiting') switchState('lobby');
-            if (newState === 'setting_secrets') {
-                switchState('setup');
+        socket.on('roomCreated', ({ roomId }) => {
+            currentRoomId = roomId;
+            document.getElementById('roomBadgeId').textContent = roomId;
+            document.getElementById('roomBadgeWrap').style.display = 'block';
+            // Disable name + create inputs so user waits
+            document.getElementById('playerName').disabled = true;
+        });
+
+        socket.on('playersInfo', ({ player1, player2 }) => {
+            // Setup panel
+            document.getElementById('p1Name').textContent = player1;
+            document.getElementById('p2Name').textContent = player2;
+            // Game panel
+            document.getElementById('g1Name').textContent = player1;
+            document.getElementById('g2Name').textContent = player2;
+        });
+
+        socket.on('gameStateUpdate', state => {
+            if (state === 'waiting') {
+                switchPanel('lobby');
+                document.getElementById('roomBadgeWrap').style.display = 'none';
+                document.getElementById('playerName').disabled = false;
+            }
+            if (state === 'setting_secrets') {
+                switchPanel('setup');
                 document.getElementById('secretNumber').value = '';
                 document.getElementById('secretNumber').disabled = false;
+                clearError(secretError, document.getElementById('secretNumber'));
             }
-            if (newState === 'playing') switchState('game');
+            if (state === 'playing') switchPanel('game');
         });
 
-        socket.on('turnUpdate', (data) => {
-            isMyTurn = (socket.id === data.currentPlayerId);
-            guessInput.disabled = !isMyTurn;
-            guessBtn.disabled = !isMyTurn;
-            
-            if (isMyTurn) {
-                guessInput.focus();
-            }
+        socket.on('turnUpdate', ({ currentPlayerId }) => {
+            isMyTurn = socket.id === currentPlayerId;
+            guessInput.disabled  = !isMyTurn;
+            guessBtn.disabled    = !isMyTurn;
+            if (isMyTurn) { guessInput.focus(); clearError(guessError, guessInput); }
         });
 
-        socket.on('timerUpdate', (data) => {
-            // Guarantee accurate visual state on every single tick
-            const isActivePlayer = (socket.id === data.currentPlayerId);
-            
-            if (isActivePlayer) {
-                turnInfo.innerText = `🔥 YOUR TURN! Time: ${data.timeLeft}s`;
-                turnInfo.style.color = 'var(--neon-gold)';
+        socket.on('timerUpdate', ({ timeLeft, currentPlayerId, currentPlayerName }) => {
+            const mine = socket.id === currentPlayerId;
+            timerPill.textContent = `${timeLeft}s`;
+            timerPill.classList.toggle('urgent', timeLeft <= 5);
+
+            if (mine) {
+                turnLabel.textContent = '🔥 YOUR TURN';
+                turnLabel.className = 'turn-label active';
             } else {
-                turnInfo.innerText = `⏳ ${data.currentPlayerName}'s Turn. Time: ${data.timeLeft}s`;
-                turnInfo.style.color = 'var(--text)';
+                turnLabel.textContent = `⏳ ${currentPlayerName}'s Turn`;
+                turnLabel.className = 'turn-label';
             }
         });
 
-        socket.on('guessResult', (data) => {
+        socket.on('guessResult', ({ text, color }) => {
             const entry = document.createElement('div');
-            entry.className = `log-entry ${data.color}`; 
-            entry.innerText = data.text;
+            entry.className = `log-entry ${color}`;
+            entry.textContent = text;
             historyLog.appendChild(entry);
-            historyLog.scrollTop = historyLog.scrollHeight; 
+            historyLog.scrollTop = historyLog.scrollHeight;
         });
 
-        socket.on('gameOver', (data) => {
-            winnerText.innerText = `🏆 ${data.winner} Wins!`;
-            winModal.style.display = 'flex';
+        socket.on('gameOver', ({ winner }) => {
+            winnerText.textContent = `${winner} Wins!`;
+            winModal.classList.add('open');
             guessInput.disabled = true;
             guessBtn.disabled = true;
-            turnInfo.innerText = "Game Over!";
-            turnInfo.style.color = 'var(--neon-blue)';
+            turnLabel.textContent = 'Game Over';
+            turnLabel.className = 'turn-label';
+            timerPill.textContent = '—';
         });
 
         socket.on('clearBoard', () => {
             historyLog.innerHTML = '';
-            winModal.style.display = 'none';
-            turnInfo.innerText = "Waiting to start...";
+            winModal.classList.remove('open');
+            turnLabel.textContent = 'Waiting…';
+            timerPill.textContent = '—';
+            timerPill.classList.remove('urgent');
         });
 
-        socket.on('errorMsg', (msg) => {
-            alert(msg);
+        socket.on('errorMsg', msg => {
+            statusBar.textContent = `⚠ ${msg}`;
         });
 
-        // --- Actions ---
-        function joinGame() {
-            const name = document.getElementById('playerName').value.trim();
-            if (!name) return alert('Enter a name!');
-            socket.emit('joinGame', name);
-            document.getElementById('playerName').disabled = true;
+        // ── Actions ────────────────────────────────
+        function getPlayerName() {
+            return document.getElementById('playerName').value.trim();
+        }
+
+        function createRoom() {
+            const name = getPlayerName();
+            if (!name) {
+                statusBar.textContent = '⚠ Enter your alias first.';
+                document.getElementById('playerName').focus();
+                return;
+            }
+            socket.emit('createRoom', name);
+        }
+
+        function joinRoom() {
+            const name = getPlayerName();
+            const roomId = document.getElementById('roomIdInput').value.trim().toUpperCase();
+            if (!name) {
+                statusBar.textContent = '⚠ Enter your alias first.';
+                document.getElementById('playerName').focus();
+                return;
+            }
+            if (!roomId || roomId.length !== 6) {
+                statusBar.textContent = '⚠ Enter a valid 6-character Room ID.';
+                return;
+            }
+            socket.emit('joinRoom', { name, roomId });
         }
 
         function setSecret() {
-            const secret = document.getElementById('secretNumber').value;
-            if (!secret || secret < 1 || secret > 100) return alert('Pick a number between 1 and 100');
-            socket.emit('setSecret', secret);
-            document.getElementById('secretNumber').disabled = true;
+            const input = document.getElementById('secretNumber');
+            const val = parseInt(input.value);
+            if (!input.value || isNaN(val) || val < 1 || val > 100) {
+                showError(secretError, input, 'Pick a number between 1 and 100.');
+                return;
+            }
+            clearError(secretError, input);
+            socket.emit('setSecret', val);
+            input.disabled = true;
         }
 
         function makeGuess() {
-            if (!isMyTurn) return; 
-            
-            const guess = guessInput.value;
-            if (!guess || guess < 1 || guess > 100) return alert('Invalid guess!');
-            
-            socket.emit('makeGuess', guess);
-            guessInput.value = ''; 
+            if (!isMyTurn) return;
+            const val = parseInt(guessInput.value);
+            if (!guessInput.value || isNaN(val) || val < 1 || val > 100) {
+                showError(guessError, guessInput, 'Enter a number between 1 and 100.');
+                guessInput.focus();
+                return;
+            }
+            clearError(guessError, guessInput);
+            socket.emit('makeGuess', val);
+            guessInput.value = '';
         }
 
         function playAgain() {
             socket.emit('playAgain');
         }
-        
-        document.getElementById('guessInput').addEventListener('keypress', function (e) {
+
+        function copyRoomId() {
+            const btn = document.getElementById('copyBtn');
+            navigator.clipboard.writeText(currentRoomId).then(() => {
+                btn.textContent = 'Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = 'Copy';
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+
+        // ── Keyboard ───────────────────────────────
+        document.getElementById('guessInput').addEventListener('keydown', e => {
             if (e.key === 'Enter') makeGuess();
+        });
+        document.getElementById('roomIdInput').addEventListener('keydown', e => {
+            if (e.key === 'Enter') joinRoom();
+        });
+        document.getElementById('playerName').addEventListener('keydown', e => {
+            if (e.key === 'Enter') createRoom();
+        });
+
+        // Auto-uppercase room ID input
+        document.getElementById('roomIdInput').addEventListener('input', function() {
+            this.value = this.value.toUpperCase();
         });
     </script>
 </body>
