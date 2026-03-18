@@ -437,6 +437,23 @@
             margin-bottom: 24px;
         }
 
+        /* ─── Reconnect Banner ───────────────────── */
+        .reconnect-banner {
+            display: none;
+            background: rgba(255, 209, 102, 0.08);
+            border: 1px solid rgba(255, 209, 102, 0.3);
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+            margin-bottom: 14px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--gold);
+            text-align: center;
+            line-height: 1.6;
+        }
+        .reconnect-banner.visible { display: block; animation: slideUp 0.3s ease; }
+        .reconnect-countdown { font-size: 1rem; font-weight: 700; display: block; margin-top: 4px; }
+
         /* ─── Divider ─────────────────────────────── */
         .divider {
             display: flex;
@@ -548,6 +565,11 @@
                 </div>
             </div>
 
+            <div class="reconnect-banner" id="reconnectBanner">
+                <span id="reconnectMsg">Opponent disconnected</span>
+                <span class="reconnect-countdown" id="reconnectCountdown"></span>
+            </div>
+
             <div class="timer-row">
                 <div class="turn-label" id="turnLabel">Waiting…</div>
                 <div class="timer-pill" id="timerPill">—s</div>
@@ -585,9 +607,25 @@
     <script>
         const socket = io();
 
+        // ── Session persistence (survives tab switch) ──
+        // We store name + roomId in sessionStorage so on reconnect we can rejoin.
+        const SESSION_KEY = 'guessclash_session';
+
+        function saveSession(data) {
+            try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(data)); } catch(e) {}
+        }
+        function loadSession() {
+            try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch(e) { return null; }
+        }
+        function clearSession() {
+            try { sessionStorage.removeItem(SESSION_KEY); } catch(e) {}
+        }
+
         // ── State ──────────────────────────────────
         let isMyTurn = false;
         let currentRoomId = null;
+        let myName = null;
+        let graceCountdownInterval = null;
 
         // ── DOM refs ───────────────────────────────
         const panels = {
@@ -595,16 +633,19 @@
             setup: document.getElementById('panel-setup'),
             game:  document.getElementById('panel-game')
         };
-        const statusBar    = document.getElementById('statusBar');
-        const historyLog   = document.getElementById('historyLog');
-        const winModal     = document.getElementById('winModal');
-        const winnerText   = document.getElementById('winnerText');
-        const turnLabel    = document.getElementById('turnLabel');
-        const timerPill    = document.getElementById('timerPill');
-        const guessInput   = document.getElementById('guessInput');
-        const guessBtn     = document.getElementById('guessBtn');
-        const guessError   = document.getElementById('guessError');
-        const secretError  = document.getElementById('secretError');
+        const statusBar         = document.getElementById('statusBar');
+        const historyLog        = document.getElementById('historyLog');
+        const winModal          = document.getElementById('winModal');
+        const winnerText        = document.getElementById('winnerText');
+        const turnLabel         = document.getElementById('turnLabel');
+        const timerPill         = document.getElementById('timerPill');
+        const guessInput        = document.getElementById('guessInput');
+        const guessBtn          = document.getElementById('guessBtn');
+        const guessError        = document.getElementById('guessError');
+        const secretError       = document.getElementById('secretError');
+        const reconnectBanner   = document.getElementById('reconnectBanner');
+        const reconnectMsg      = document.getElementById('reconnectMsg');
+        const reconnectCountdown= document.getElementById('reconnectCountdown');
 
         // ── Helpers ────────────────────────────────
         function switchPanel(name) {
@@ -627,9 +668,59 @@
             if (input) input.classList.remove('error');
         }
 
+        function showReconnectBanner(msg, graceSeconds) {
+            reconnectMsg.textContent = msg;
+            reconnectBanner.classList.add('visible');
+            let t = graceSeconds;
+            reconnectCountdown.textContent = `${t}s remaining`;
+            clearInterval(graceCountdownInterval);
+            graceCountdownInterval = setInterval(() => {
+                t--;
+                if (t <= 0) {
+                    clearInterval(graceCountdownInterval);
+                    reconnectCountdown.textContent = 'Grace period expired.';
+                } else {
+                    reconnectCountdown.textContent = `${t}s remaining`;
+                }
+            }, 1000);
+        }
+
+        function hideReconnectBanner() {
+            reconnectBanner.classList.remove('visible');
+            reconnectCountdown.textContent = '';
+            clearInterval(graceCountdownInterval);
+        }
+
         // ── Socket Events ──────────────────────────
         socket.on('connect', () => {
-            statusBar.textContent = 'Connected. Ready to play.';
+            // Attempt to rejoin if we have a saved session
+            const session = loadSession();
+            if (session && session.roomId && session.playerName) {
+                statusBar.textContent = 'Reconnecting…';
+                socket.emit('rejoinRoom', {
+                    roomId: session.roomId,
+                    playerName: session.playerName
+                });
+            } else {
+                statusBar.textContent = 'Connected. Ready to play.';
+            }
+        });
+
+        socket.on('rejoinSuccess', ({ gameState, player1, player2 }) => {
+            statusBar.textContent = 'Reconnected!';
+            hideReconnectBanner();
+
+            // Restore player name UI fields
+            if (player1) document.getElementById('p1Name').textContent = player1;
+            if (player2) document.getElementById('p2Name').textContent = player2;
+            if (player1) document.getElementById('g1Name').textContent = player1;
+            if (player2) document.getElementById('g2Name').textContent = player2;
+
+            // Restore panel
+            if (gameState === 'waiting')         switchPanel('lobby');
+            if (gameState === 'setting_secrets') switchPanel('setup');
+            if (gameState === 'playing')         switchPanel('game');
+            if (gameState === 'game_over')       switchPanel('game');
         });
 
         socket.on('updateStatus', msg => {
@@ -638,17 +729,16 @@
 
         socket.on('roomCreated', ({ roomId }) => {
             currentRoomId = roomId;
+            myName = document.getElementById('playerName').value.trim();
+            saveSession({ roomId, playerName: myName });
             document.getElementById('roomBadgeId').textContent = roomId;
             document.getElementById('roomBadgeWrap').style.display = 'block';
-            // Disable name + create inputs so user waits
             document.getElementById('playerName').disabled = true;
         });
 
         socket.on('playersInfo', ({ player1, player2 }) => {
-            // Setup panel
             document.getElementById('p1Name').textContent = player1;
             document.getElementById('p2Name').textContent = player2;
-            // Game panel
             document.getElementById('g1Name').textContent = player1;
             document.getElementById('g2Name').textContent = player2;
         });
@@ -658,6 +748,7 @@
                 switchPanel('lobby');
                 document.getElementById('roomBadgeWrap').style.display = 'none';
                 document.getElementById('playerName').disabled = false;
+                clearSession();
             }
             if (state === 'setting_secrets') {
                 switchPanel('setup');
@@ -665,13 +756,27 @@
                 document.getElementById('secretNumber').disabled = false;
                 clearError(secretError, document.getElementById('secretNumber'));
             }
-            if (state === 'playing') switchPanel('game');
+            if (state === 'playing') {
+                switchPanel('game');
+                hideReconnectBanner();
+            }
+        });
+
+        // Opponent went away — show the grace countdown
+        socket.on('playerDisconnected', ({ playerName, graceSeconds }) => {
+            showReconnectBanner(`⚠️ ${playerName} disconnected…`, graceSeconds);
+            // Disable input while waiting
+            guessInput.disabled = true;
+            guessBtn.disabled = true;
+            turnLabel.textContent = 'Waiting for reconnect…';
+            turnLabel.className = 'turn-label';
         });
 
         socket.on('turnUpdate', ({ currentPlayerId }) => {
             isMyTurn = socket.id === currentPlayerId;
             guessInput.disabled  = !isMyTurn;
             guessBtn.disabled    = !isMyTurn;
+            hideReconnectBanner();
             if (isMyTurn) { guessInput.focus(); clearError(guessError, guessInput); }
         });
 
@@ -705,6 +810,7 @@
             turnLabel.textContent = 'Game Over';
             turnLabel.className = 'turn-label';
             timerPill.textContent = '—';
+            hideReconnectBanner();
         });
 
         socket.on('clearBoard', () => {
@@ -713,6 +819,8 @@
             turnLabel.textContent = 'Waiting…';
             timerPill.textContent = '—';
             timerPill.classList.remove('urgent');
+            hideReconnectBanner();
+            clearSession();
         });
 
         socket.on('errorMsg', msg => {
@@ -731,6 +839,7 @@
                 document.getElementById('playerName').focus();
                 return;
             }
+            myName = name;
             socket.emit('createRoom', name);
         }
 
@@ -746,6 +855,9 @@
                 statusBar.textContent = '⚠ Enter a valid 6-character Room ID.';
                 return;
             }
+            myName = name;
+            currentRoomId = roomId;
+            saveSession({ roomId, playerName: name });
             socket.emit('joinRoom', { name, roomId });
         }
 
