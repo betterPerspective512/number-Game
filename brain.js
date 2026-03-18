@@ -13,8 +13,14 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+const GRACE_SECONDS = 45;
+
 // All active rooms stored here
 const rooms = {};
+
+// Grace period store: maps old socket.id -> { roomId, playerName, graceTimer }
+// Allows a disconnected player 45s to reconnect before their slot is removed.
+const gracePending = {};
 
 // Generate a short, readable 6-character room ID
 function generateRoomId() {
@@ -254,6 +260,61 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('updateStatus', 'New Round! Set your new secret numbers.');
     });
 
+    // --- Rejoin after tab switch / brief disconnect ---
+    socket.on('rejoinRoom', ({ roomId, playerName }) => {
+        const room = rooms[roomId];
+        if (!room) {
+            socket.emit('errorMsg', 'Room no longer exists.');
+            return;
+        }
+
+        // Find this player's slot by name (old socket.id is already gone)
+        const player = room.players.find(p => p.name === playerName);
+        if (!player) {
+            socket.emit('errorMsg', 'Could not find your slot in this room.');
+            return;
+        }
+
+        // Cancel the grace timer — they made it back in time
+        const grace = gracePending[player.id];
+        if (grace) {
+            clearTimeout(grace.graceTimer);
+            delete gracePending[player.id];
+            console.log(`Grace period cancelled for ${playerName} in room ${roomId}`);
+        }
+
+        // Swap old socket.id for the new one
+        const oldId = player.id;
+        player.id = socket.id;
+        socket.roomId = roomId;
+        socket.join(roomId);
+
+        console.log(`${playerName} rejoined room ${roomId} (${oldId} → ${socket.id})`);
+
+        // Restore their UI to whatever state the game is in
+        socket.emit('rejoinSuccess', {
+            gameState: room.gameState,
+            player1: room.players[0]?.name,
+            player2: room.players[1]?.name,
+        });
+
+        // If game was paused due to disconnect, resume turn timer
+        if (room.gameState === 'playing' && room.pausedForDisconnect) {
+            room.pausedForDisconnect = false;
+            io.to(roomId).emit('updateStatus', `${playerName} reconnected. Game resumed!`);
+            startTurn(roomId);
+        } else {
+            socket.emit('updateStatus', `Welcome back, ${playerName}!`);
+        }
+
+        // Re-sync turn state so their buttons re-enable correctly
+        if (room.gameState === 'playing') {
+            io.to(roomId).emit('turnUpdate', {
+                currentPlayerId: room.players[room.currentPlayerIndex].id
+            });
+        }
+    });
+
     // --- Disconnect ---
     socket.on('disconnect', () => {
         console.log(`User disconnected: ${socket.id}`);
@@ -261,18 +322,68 @@ io.on('connection', (socket) => {
         if (!roomId || !rooms[roomId]) return;
 
         const room = rooms[roomId];
-        clearInterval(room.timerInterval);
-        room.players = room.players.filter(p => p.id !== socket.id);
+        const player = room.players.find(p => p.id === socket.id);
+        if (!player) return;
 
-        if (room.players.length === 0) {
-            // Clean up empty rooms
-            delete rooms[roomId];
-            console.log(`Room ${roomId} deleted (empty).`);
+        // Only apply grace period when a real game is in progress
+        // (both players present, game not already over)
+        const isActivGame = room.players.length === 2 && room.gameState !== 'waiting';
+
+        if (isActivGame) {
+            // Pause the turn timer so the absent player doesn't lose on a timer
+            clearInterval(room.timerInterval);
+            room.pausedForDisconnect = true;
+
+            io.to(roomId).emit('updateStatus',
+                `⚠️ ${player.name} disconnected. Waiting ${GRACE_SECONDS}s for reconnect…`
+            );
+            io.to(roomId).emit('playerDisconnected', {
+                playerName: player.name,
+                graceSeconds: GRACE_SECONDS
+            });
+
+            console.log(`Grace period started for ${player.name} in room ${roomId}`);
+
+            // Store grace info keyed on OLD socket.id (still valid as a key)
+            gracePending[socket.id] = {
+                roomId,
+                playerName: player.name,
+                graceTimer: setTimeout(() => {
+                    // Grace expired — remove them for real
+                    delete gracePending[socket.id];
+                    if (!rooms[roomId]) return;
+
+                    room.players = room.players.filter(p => p.name !== player.name);
+                    clearInterval(room.timerInterval);
+
+                    if (room.players.length === 0) {
+                        delete rooms[roomId];
+                        console.log(`Room ${roomId} deleted (empty after grace).`);
+                    } else {
+                        room.gameState = 'waiting';
+                        room.pausedForDisconnect = false;
+                        io.to(roomId).emit('clearBoard');
+                        io.to(roomId).emit('gameStateUpdate', 'waiting');
+                        io.to(roomId).emit('updateStatus',
+                            `${player.name} didn't reconnect. Waiting for a new player…`
+                        );
+                    }
+                    console.log(`Grace expired for ${player.name} in room ${roomId}`);
+                }, GRACE_SECONDS * 1000)
+            };
+
         } else {
-            room.gameState = 'waiting';
-            io.to(roomId).emit('clearBoard');
-            io.to(roomId).emit('gameStateUpdate', 'waiting');
-            io.to(roomId).emit('updateStatus', 'Opponent disconnected. Waiting for a new player...');
+            // No active game — clean up immediately
+            room.players = room.players.filter(p => p.id !== socket.id);
+            if (room.players.length === 0) {
+                delete rooms[roomId];
+                console.log(`Room ${roomId} deleted (empty).`);
+            } else {
+                room.gameState = 'waiting';
+                io.to(roomId).emit('clearBoard');
+                io.to(roomId).emit('gameStateUpdate', 'waiting');
+                io.to(roomId).emit('updateStatus', 'Opponent disconnected. Waiting for a new player...');
+            }
         }
     });
 });
