@@ -3,6 +3,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -12,55 +13,70 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// The Game Data Structure
-let game = {
-    players: [],
-    turnCount: 0,
-    gameState: 'waiting', // waiting, setting_secrets, playing, game_over
-    currentPlayerIndex: 0,
-    timerInterval: null,
-    timeLeft: 15
-};
+// All active rooms stored here
+const rooms = {};
 
-// Function to handle turn switching and timer management
-function startTurn() {
-    game.timeLeft = 15;
-    clearInterval(game.timerInterval);
-    
+// Generate a short, readable 6-character room ID
+function generateRoomId() {
+    return crypto.randomBytes(3).toString('hex').toUpperCase();
+}
+
+// Create a fresh game state for a new room
+function createRoom() {
+    return {
+        players: [],
+        turnCount: 0,
+        gameState: 'waiting', // waiting, setting_secrets, playing, game_over
+        currentPlayerIndex: 0,
+        timerInterval: null,
+        timeLeft: 15
+    };
+}
+
+// Start a turn timer for a specific room
+function startTurn(roomId) {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    room.timeLeft = 15;
+    clearInterval(room.timerInterval);
+
     // Broadcast initial turn state to lock/unlock inputs
-    io.emit('turnUpdate', {
-        currentPlayerId: game.players[game.currentPlayerIndex].id
+    io.to(roomId).emit('turnUpdate', {
+        currentPlayerId: room.players[room.currentPlayerIndex].id
     });
 
     // Broadcast the first tick immediately
-    io.emit('timerUpdate', {
-        timeLeft: game.timeLeft,
-        currentPlayerId: game.players[game.currentPlayerIndex].id,
-        currentPlayerName: game.players[game.currentPlayerIndex].name
+    io.to(roomId).emit('timerUpdate', {
+        timeLeft: room.timeLeft,
+        currentPlayerId: room.players[room.currentPlayerIndex].id,
+        currentPlayerName: room.players[room.currentPlayerIndex].name
     });
 
-    game.timerInterval = setInterval(() => {
-        game.timeLeft--;
-        
-        // Send absolute truth to all clients every second
-        io.emit('timerUpdate', {
-            timeLeft: game.timeLeft,
-            currentPlayerId: game.players[game.currentPlayerIndex].id,
-            currentPlayerName: game.players[game.currentPlayerIndex].name
+    room.timerInterval = setInterval(() => {
+        if (!rooms[roomId]) {
+            clearInterval(room.timerInterval);
+            return;
+        }
+
+        room.timeLeft--;
+
+        io.to(roomId).emit('timerUpdate', {
+            timeLeft: room.timeLeft,
+            currentPlayerId: room.players[room.currentPlayerIndex].id,
+            currentPlayerName: room.players[room.currentPlayerIndex].name
         });
-        
-        // If time runs out
-        if (game.timeLeft <= 0) {
-            clearInterval(game.timerInterval);
-            
-            io.emit('guessResult', {
-                text: `⏰ ${game.players[game.currentPlayerIndex].name} ran out of time! Turn skipped.`,
+
+        if (room.timeLeft <= 0) {
+            clearInterval(room.timerInterval);
+
+            io.to(roomId).emit('guessResult', {
+                text: `⏰ ${room.players[room.currentPlayerIndex].name} ran out of time! Turn skipped.`,
                 color: 'red'
             });
-            
-            // Switch turn to the other player
-            game.currentPlayerIndex = game.currentPlayerIndex === 0 ? 1 : 0;
-            startTurn();
+
+            room.currentPlayerIndex = room.currentPlayerIndex === 0 ? 1 : 0;
+            startTurn(roomId);
         }
     }, 1000);
 }
@@ -68,128 +84,196 @@ function startTurn() {
 io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
 
-    // Phase 1: Join Lobby
-    socket.on('joinGame', (name) => {
-        if (game.players.length >= 2) {
-            socket.emit('errorMsg', 'Game is already full!');
+    // --- Phase 0: Room Management ---
+
+    // Player creates a new room
+    socket.on('createRoom', (name) => {
+        if (!name || !name.trim()) {
+            socket.emit('errorMsg', 'Please enter a valid name.');
             return;
         }
 
-        game.players.push({
+        const roomId = generateRoomId();
+        rooms[roomId] = createRoom();
+
+        rooms[roomId].players.push({
             id: socket.id,
-            name: name,
+            name: name.trim(),
             secret: null,
             lastGuess: null
         });
 
-        io.emit('updateStatus', `Waiting for players... (${game.players.length}/2)`);
+        socket.join(roomId);
+        socket.roomId = roomId; // track which room this socket belongs to
 
-        if (game.players.length === 2) {
-            game.gameState = 'setting_secrets';
-            io.emit('gameStateUpdate', game.gameState);
-            io.emit('updateStatus', 'Both players joined! Set your secret numbers.');
-        }
+        socket.emit('roomCreated', { roomId });
+        socket.emit('updateStatus', `Room ${roomId} created. Waiting for opponent...`);
+        console.log(`Room ${roomId} created by ${name}`);
     });
 
-    // Phase 2: Set Secret Number
+    // Player joins an existing room by ID
+    socket.on('joinRoom', ({ name, roomId }) => {
+        if (!name || !name.trim()) {
+            socket.emit('errorMsg', 'Please enter a valid name.');
+            return;
+        }
+
+        const cleanRoomId = roomId.trim().toUpperCase();
+        const room = rooms[cleanRoomId];
+
+        if (!room) {
+            socket.emit('errorMsg', `Room "${cleanRoomId}" does not exist.`);
+            return;
+        }
+
+        if (room.players.length >= 2) {
+            socket.emit('errorMsg', 'This room is already full!');
+            return;
+        }
+
+        if (room.gameState !== 'waiting') {
+            socket.emit('errorMsg', 'This game has already started.');
+            return;
+        }
+
+        room.players.push({
+            id: socket.id,
+            name: name.trim(),
+            secret: null,
+            lastGuess: null
+        });
+
+        socket.join(cleanRoomId);
+        socket.roomId = cleanRoomId;
+
+        // Notify both players
+        io.to(cleanRoomId).emit('updateStatus', `Both players joined! Set your secret numbers.`);
+
+        room.gameState = 'setting_secrets';
+        io.to(cleanRoomId).emit('gameStateUpdate', room.gameState);
+        io.to(cleanRoomId).emit('playersInfo', {
+            player1: room.players[0].name,
+            player2: room.players[1].name
+        });
+
+        console.log(`${name} joined room ${cleanRoomId}`);
+    });
+
+    // --- Phase 2: Set Secret Number ---
     socket.on('setSecret', (secretNumber) => {
-        const player = game.players.find(p => p.id === socket.id);
+        const roomId = socket.roomId;
+        const room = rooms[roomId];
+        if (!room) return;
+
+        const player = room.players.find(p => p.id === socket.id);
         if (player) {
             player.secret = parseInt(secretNumber);
             socket.emit('updateStatus', 'Secret set! Waiting for opponent...');
         }
 
-        const allSecretsSet = game.players.every(p => p.secret !== null);
-        if (allSecretsSet && game.players.length === 2) {
-            game.gameState = 'playing';
-            game.currentPlayerIndex = 0; // Player 1 starts
-            io.emit('gameStateUpdate', game.gameState);
-            io.emit('updateStatus', 'Game ON! Start guessing.');
-            startTurn();
+        const allSecretsSet = room.players.every(p => p.secret !== null);
+        if (allSecretsSet && room.players.length === 2) {
+            room.gameState = 'playing';
+            room.currentPlayerIndex = 0;
+            io.to(roomId).emit('gameStateUpdate', room.gameState);
+            io.to(roomId).emit('updateStatus', 'Game ON! Start guessing.');
+            startTurn(roomId);
         }
     });
 
-    // Phase 3: The Guessing Loop
+    // --- Phase 3: The Guessing Loop ---
     socket.on('makeGuess', (guessStr) => {
-        if (game.gameState !== 'playing') return;
+        const roomId = socket.roomId;
+        const room = rooms[roomId];
+        if (!room || room.gameState !== 'playing') return;
 
-        if (game.players[game.currentPlayerIndex].id !== socket.id) {
+        if (room.players[room.currentPlayerIndex].id !== socket.id) {
             socket.emit('errorMsg', "Hold on, it's not your turn!");
             return;
         }
 
         const guess = parseInt(guessStr);
-        const playerIndex = game.currentPlayerIndex;
-        const player = game.players[playerIndex];
+
+        // Server-side safety validation (client also validates)
+        if (isNaN(guess) || guess < 1 || guess > 100) {
+            socket.emit('errorMsg', 'Guess must be a number between 1 and 100.');
+            return;
+        }
+
+        const playerIndex = room.currentPlayerIndex;
+        const player = room.players[playerIndex];
         const opponentIndex = playerIndex === 0 ? 1 : 0;
-        const opponent = game.players[opponentIndex];
+        const opponent = room.players[opponentIndex];
 
-        clearInterval(game.timerInterval);
-
+        clearInterval(room.timerInterval);
         player.lastGuess = guess;
-        game.turnCount++;
-
-        let feedback = '';
-        let statusColor = ''; 
+        room.turnCount++;
 
         if (guess === opponent.secret) {
-            feedback = 'Winner';
-            statusColor = 'gold';
-            game.gameState = 'game_over';
-            
-            io.emit('guessResult', {
+            room.gameState = 'game_over';
+            io.to(roomId).emit('guessResult', {
                 text: `${player.name} guessed ${guess} -> 🏆 Correct!`,
-                color: statusColor
+                color: 'gold'
             });
-            
-            io.emit('gameOver', { winner: player.name });
+            io.to(roomId).emit('gameOver', { winner: player.name });
+
         } else if (guess < opponent.secret) {
-            feedback = 'Higher';
-            statusColor = 'blue';
-            io.emit('guessResult', {
-                text: `${player.name} guessed ${guess} -> Opponent says ${feedback} ⬆️`,
-                color: statusColor
+            io.to(roomId).emit('guessResult', {
+                text: `${player.name} guessed ${guess} -> Opponent says Higher ⬆️`,
+                color: 'blue'
             });
-            
-            game.currentPlayerIndex = opponentIndex;
-            startTurn();
+            room.currentPlayerIndex = opponentIndex;
+            startTurn(roomId);
+
         } else {
-            feedback = 'Lower';
-            statusColor = 'red';
-            io.emit('guessResult', {
-                text: `${player.name} guessed ${guess} -> Opponent says ${feedback} ⬇️`,
-                color: statusColor
+            io.to(roomId).emit('guessResult', {
+                text: `${player.name} guessed ${guess} -> Opponent says Lower ⬇️`,
+                color: 'red'
             });
-            
-            game.currentPlayerIndex = opponentIndex;
-            startTurn();
+            room.currentPlayerIndex = opponentIndex;
+            startTurn(roomId);
         }
     });
 
-    // Phase 4: Reset Game
+    // --- Phase 4: Reset Game ---
     socket.on('playAgain', () => {
-        if (game.gameState === 'game_over') {
-            game.turnCount = 0;
-            game.gameState = 'setting_secrets';
-            clearInterval(game.timerInterval);
-            game.players.forEach(p => {
-                p.secret = null;
-                p.lastGuess = null;
-            });
-            io.emit('clearBoard');
-            io.emit('gameStateUpdate', game.gameState);
-            io.emit('updateStatus', 'New Game! Set your new secret numbers.');
-        }
+        const roomId = socket.roomId;
+        const room = rooms[roomId];
+        if (!room || room.gameState !== 'game_over') return;
+
+        room.turnCount = 0;
+        room.gameState = 'setting_secrets';
+        clearInterval(room.timerInterval);
+        room.players.forEach(p => {
+            p.secret = null;
+            p.lastGuess = null;
+        });
+
+        io.to(roomId).emit('clearBoard');
+        io.to(roomId).emit('gameStateUpdate', room.gameState);
+        io.to(roomId).emit('updateStatus', 'New Round! Set your new secret numbers.');
     });
 
+    // --- Disconnect ---
     socket.on('disconnect', () => {
         console.log(`User disconnected: ${socket.id}`);
-        clearInterval(game.timerInterval);
-        game.players = game.players.filter(p => p.id !== socket.id);
-        game.gameState = 'waiting';
-        io.emit('clearBoard');
-        io.emit('gameStateUpdate', 'waiting');
-        io.emit('updateStatus', 'Opponent disconnected. Waiting for new player...');
+        const roomId = socket.roomId;
+        if (!roomId || !rooms[roomId]) return;
+
+        const room = rooms[roomId];
+        clearInterval(room.timerInterval);
+        room.players = room.players.filter(p => p.id !== socket.id);
+
+        if (room.players.length === 0) {
+            // Clean up empty rooms
+            delete rooms[roomId];
+            console.log(`Room ${roomId} deleted (empty).`);
+        } else {
+            room.gameState = 'waiting';
+            io.to(roomId).emit('clearBoard');
+            io.to(roomId).emit('gameStateUpdate', 'waiting');
+            io.to(roomId).emit('updateStatus', 'Opponent disconnected. Waiting for a new player...');
+        }
     });
 });
 
